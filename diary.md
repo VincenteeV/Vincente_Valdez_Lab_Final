@@ -1,0 +1,7 @@
+4/27: Started writing code after watching some videos and reading documentation on notcurses. Started board configuration code and will test if it works before moving on to user input and dynamic sizing. Also planned out how the minesweeper game mechanics will work on paper.
+
+4/29: Got main board looking good and will start to create user input and a start menu for the user to choose game type and size, still getting used to notcurses and haven't implemented any gameplay yet.
+
+4/30: Created a main menu screen using notcurses so that the user can select 1 of 3 game style choices (not implemented yet). and 4 game sizes. The user selects with the arrow keys and enter and then the minesweeper board is made.
+
+5/2: Created custom game board logic into a seperate screen when user selects custom size. Player enters number of rows, columns, and mines that they want. Also fixed a wierd highligting issue in the main menu that caused the size label to be highlighted when on the lowest gamemode selection. Beginning to start actual gameplay. Created a placeMines function that will activate after the player picks their first tile so that they never start on a bomb. Also planning to commit for like the second time because I've been forgetting to due to just working on my pc because my laptop keyboard is still broken and I figure assignment will look better with more commits.
