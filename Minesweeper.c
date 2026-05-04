@@ -1,5 +1,6 @@
 #include <locale.h>
 #include <stdlib.h>
+#include <time.h>
 #include <notcurses/notcurses.h>
 #include "Minesweeper.h"
 
@@ -7,6 +8,7 @@ int main(void)
 {
     // 1. Setup locale for UTF-8 (essential for the ▒ character)
     setlocale(LC_ALL, "");
+    srand(time(NULL));
 
     // 2. Initialize Notcurses
     struct notcurses_options nopts = {
