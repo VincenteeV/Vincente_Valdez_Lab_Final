@@ -74,13 +74,28 @@ int main(void)
         return -1;
     }
 
-    // 4. Game Loop / Wait for Input
-    struct ncplane *stdn = notcurses_stdplane(nc);
-    ncplane_putstr_yx(stdn, 0, 1, "Minesweeper - Press any key to exit");
-    notcurses_render(nc);
-
+    // 4. Initialize Game State
     struct ncinput ni;
-    notcurses_get_blocking(nc, &ni);
+
+    gameState state = {
+        .cursor_x = 0,
+        .cursor_y = 0,
+        .boardHeight = boardHeight,
+        .boardWidth = boardWidth,
+        .mineCount = mineCount,
+        .firstMove = true,
+        .running = true};
+
+    while (state.running)
+    {
+
+        // Update the visual state of all cells (highlights, numbers, etc.)
+        drawBoard(nc, &state, board);
+
+        uint32_t key = notcurses_get_blocking(nc, &ni);
+        getUserControls(key, &state, board);
+
+    }
 
     // 5. Cleanup
     notcurses_stop(nc);
@@ -113,6 +128,7 @@ int createMinesweeperGrid(struct notcurses *nc, int h, int w, cell_t board[h][w]
             // Logic state
             board[y][x].is_mine = 0;
             board[y][x].is_revealed = 0;
+            board[y][x].is_flagged = 0;
             board[y][x].neighbor_count = 0;
 
             // Visual state: Set color and string
@@ -208,11 +224,11 @@ int runMainMenu(struct notcurses *nc, GameMode *out_mode, GameSize *out_size)
         uint32_t key = notcurses_get_blocking(nc, &ni);
 
         // 6. Handle Input State
-        if (key == NCKEY_UP)
+        if (key == 'w' || key == 'W')
         {
             cursor_pos = (cursor_pos > 0) ? cursor_pos - 1 : 7;
         }
-        else if (key == NCKEY_DOWN)
+        else if (key == 's' || key == 'S')
         {
             cursor_pos = (cursor_pos < 7) ? cursor_pos + 1 : 0;
         }
@@ -286,17 +302,17 @@ int getCustomInput(struct notcurses *nc, int y, int x, const char *prompt)
     return atoi(buf);
 }
 
-void placeMines(int h, int w, int mine_count, cell_t board[h][w])
+void placeMines(gameState *state, cell_t board[state->boardHeight][state->boardWidth])
 {
     int placed = 0;
-    while (placed < mine_count)
+    while (placed < state->mineCount)
     {
         // Generate random coordinates within board bounds
-        int ry = rand() % h;
-        int rx = rand() % w;
+        int ry = rand() % state->boardHeight;
+        int rx = rand() % state->boardWidth;
 
         // Only place a mine if there isn't one there already
-        if (board[ry][rx].is_mine == 0)
+        if (board[ry][rx].is_mine == 0 && ry != state->cursor_y && rx != state->cursor_x)
         {
             board[ry][rx].is_mine = 1;
             placed++;
@@ -304,24 +320,32 @@ void placeMines(int h, int w, int mine_count, cell_t board[h][w])
     }
 }
 
-void countNeighbors(int h, int w, cell_t board[h][w]) {
-    for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++) {
+void countNeighbors(gameState *state, cell_t board[state->boardHeight][state->boardWidth])
+{
+    for (int y = 0; y < state->boardHeight; y++)
+    {
+        for (int x = 0; x < state->boardWidth; x++)
+        {
             // Skip mine cells; they don't need a neighbor count
-            if (board[y][x].is_mine) continue;
+            if (board[y][x].is_mine)
+                continue;
 
             int count = 0;
 
             // Check the 3x3 area around the current cell (y, x)
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
                     int ny = y + dy; // neighbor y
                     int nx = x + dx; // neighbor x
 
                     // 1. BOUNDS CHECK: Ensure neighbor is inside the grid
-                    if (ny >= 0 && ny < h && nx >= 0 && nx < w) {
+                    if (ny >= 0 && ny < state->boardHeight && nx >= 0 && nx < state->boardWidth)
+                    {
                         // 2. MINE CHECK: Increment count if it's a mine
-                        if (board[ny][nx].is_mine) {
+                        if (board[ny][nx].is_mine)
+                        {
                             count++;
                         }
                     }
@@ -330,4 +354,130 @@ void countNeighbors(int h, int w, cell_t board[h][w]) {
             board[y][x].neighbor_count = count;
         }
     }
+}
+void drawBoard(struct notcurses *nc, gameState *state, cell_t board[state->boardHeight][state->boardWidth])
+{
+    for (int y = 0; y < state->boardHeight; y++)
+    {
+        for (int x = 0; x < state->boardWidth; x++)
+        {
+            struct ncplane *p = board[y][x].plane;
+
+            // 1. Determine Highlight
+            if (y == state->cursor_y && x == state->cursor_x)
+            {
+                ncplane_set_bg_rgb(p, 0x444444); // Highlighted cursor background
+            }
+            else
+            {
+                ncplane_set_bg_rgb(p, 0x000000); // Standard background
+            }
+
+            // 2. Determine Tile Visuals
+            if (board[y][x].is_revealed)
+            {
+                if (board[y][x].is_mine)
+                {
+                    ncplane_set_fg_rgb(p, 0xFF0000); // Red Mine
+                    ncplane_putstr_yx(p, 0, 0, "💣");
+                }
+                else
+                {
+                    // Draw the number (neighbor count)
+                    ncplane_set_fg_rgb(p, 0x00FF00); // Green numbers
+                    char buf[2] = {board[y][x].neighbor_count + '0', '\0'};
+                    ncplane_putstr_yx(p, 0, 0, buf);
+                }
+            }
+            else if (board[y][x].is_flagged)
+            {
+                ncplane_set_fg_rgb(p, 0xFFFF00); // Yellow flag
+                ncplane_putstr_yx(p, 0, 0, "⚑");
+            }
+            else
+            {
+                ncplane_set_fg_rgb(p, 0x888888); // Hidden tile
+                ncplane_putstr_yx(p, 0, 0, "回");
+            }
+        }
+    }
+    notcurses_render(nc); // Render everything once after all planes are updated
+}
+
+void getUserControls(uint32_t key, gameState *state, cell_t board[state->boardHeight][state->boardWidth])
+{
+
+    switch (key)
+    {
+    case 'w':
+    case 'W':
+        if ((state->cursor_y) > 0)
+            (state->cursor_y)--;
+        break;
+    case 's':
+    case 'S':
+        if ((state->cursor_y) < state->boardHeight - 1)
+            (state->cursor_y)++;
+        break;
+    case 'a':
+    case 'A':
+        if ((state->cursor_x) > 0)
+            (state->cursor_x)--;
+        break;
+    case 'd':
+    case 'D':
+        if ((state->cursor_x) < state->boardWidth - 1)
+            (state->cursor_x)++;
+        break;
+    case 'c':
+    case 'C':
+        if (state->firstMove)
+        {
+            placeMines(state, board);
+            countNeighbors(state, board);
+            state->firstMove = 0;
+        }
+        revealTile(state, board, state->cursor_x, state->cursor_y);
+
+        break;
+    case 'f':
+    case 'F':
+        // handle_flag logic here
+        break;
+    case 'q':
+    case 'Q':
+        state->running = false;
+        break;
+    case NCKEY_ESC:
+        state->running = false;
+        break;
+    }
+}
+
+void revealTile(gameState *state, cell_t board[state->boardHeight][state->boardWidth], int x, int y){
+    if (board[y][x].is_revealed)
+    {
+        return;
+    }
+    else board[y][x].is_revealed = 1;
+
+    if (board[y][x].neighbor_count == 0)
+    {
+        for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int ny = y + dy; // neighbor y
+                    int nx = x + dx; // neighbor x
+
+                    // 1. BOUNDS CHECK: Ensure neighbor is inside the grid
+                    if (ny >= 0 && ny < state->boardHeight && nx >= 0 && nx < state->boardWidth)
+                    {
+                        revealTile(state, board, nx, ny);
+                    }
+                }
+            }
+        
+    }
+    
 }
