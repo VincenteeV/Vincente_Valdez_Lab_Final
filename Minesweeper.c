@@ -76,27 +76,43 @@ int main(void)
         return -1;
     }
 
+    struct ncplane_options hopts = {
+        .y = 1, // Near the top of the screen
+        .x = 5, // Aligned with where your board likely starts
+        .rows = 1,
+        .cols = 40,
+    };
+    struct ncplane *hud_plane = ncplane_create(notcurses_stdplane(nc), &hopts);
+
     // 4. Initialize Game State
     struct ncinput ni;
 
     gameState state = {
+        .firstMove = true,
+        .running = true,
+        .userWon = false,
         .cursor_x = 0,
         .cursor_y = 0,
         .boardHeight = boardHeight,
         .boardWidth = boardWidth,
         .mineCount = mineCount,
-        .firstMove = true,
-        .running = true};
+        .flagCount = 0,
+        .variant = chosen_mode,
+        .nc = nc};
 
     while (state.running)
     {
+        ncplane_erase(hud_plane);
+        ncplane_set_fg_rgb(hud_plane, 0x00FF00); // Green text
+        ncplane_printf_yx(hud_plane, 0, 0, "Total Mines: %d | Remaining Mines: %d",
+                          state.mineCount,
+                          state.mineCount - state.flagCount);
 
         // Update the visual state of all cells (highlights, numbers, etc.)
-        drawBoard(nc, &state, board);
+        drawBoard(&state, board);
 
         uint32_t key = notcurses_get_blocking(nc, &ni);
         getUserControls(key, &state, board);
-
     }
 
     // 5. Cleanup
@@ -132,9 +148,11 @@ int createMinesweeperGrid(struct notcurses *nc, int h, int w, cell_t board[h][w]
             board[y][x].is_revealed = 0;
             board[y][x].is_flagged = 0;
             board[y][x].neighbor_count = 0;
+            board[y][x].display_count = 0;
 
             // Visual state: Set color and string
             ncplane_set_fg_rgb(board[y][x].plane, 0xFFFFFF); // Medium Grey
+            
             ncplane_putstr_yx(board[y][x].plane, 0, 0, "回");
         }
     }
@@ -148,7 +166,7 @@ int runMainMenu(struct notcurses *nc, GameMode *out_mode, GameSize *out_size)
     struct ncinput ni;
 
     int cursor_pos = 0; // 0-2: Modes, 3-6: Sizes, 7: Start
-    GameMode selected_mode = MODE_BEGINNER;
+    GameMode selected_mode = NORMAL;
     GameSize selected_size = SIZE_SMALL;
     bool running = true;
 
@@ -349,16 +367,28 @@ void countNeighbors(gameState *state, cell_t board[state->boardHeight][state->bo
                         if (board[ny][nx].is_mine)
                         {
                             count++;
+                            if (state->variant == CHECKBOARD && (ny + nx) % 2 == 0)
+                            {
+                                count++;
+                            }
+                            
                         }
                     }
                 }
             }
             board[y][x].neighbor_count = count;
+            board[y][x].display_count = count;
+
+            if (state->variant == LIAR && count > 0)
+            {
+                board[y][x].display_count = count + (rand() % 3) - 1;
+            }
         }
     }
 }
-void drawBoard(struct notcurses *nc, gameState *state, cell_t board[state->boardHeight][state->boardWidth])
+void drawBoard(gameState *state, cell_t board[state->boardHeight][state->boardWidth])
 {
+    bool allTilesRevealed = true;
     for (int y = 0; y < state->boardHeight; y++)
     {
         for (int x = 0; x < state->boardWidth; x++)
@@ -368,31 +398,75 @@ void drawBoard(struct notcurses *nc, gameState *state, cell_t board[state->board
             // 1. Determine Highlight
             if (y == state->cursor_y && x == state->cursor_x)
             {
-                ncplane_set_bg_rgb(p, 0x444444); // Highlighted cursor background
+                ncplane_set_bg_rgb(p, 0x00FF00); // Highlighted cursor background
+            }
+            else if (state->variant == CHECKBOARD && (y + x) % 2 == 0 && board[y][x].is_revealed)
+            {
+                ncplane_set_bg_rgb(p, 0x3B444B);
             }
             else
             {
-                ncplane_set_bg_rgb(p, 0x000000); // Standard background
+                ncplane_set_bg_default(p); // Standard background
             }
+            
 
             // 2. Determine Tile Visuals
             if (board[y][x].is_revealed)
             {
+                
                 if (board[y][x].is_mine)
                 {
-                    ncplane_set_fg_rgb(p, 0xFF0000); // Red Mine
                     ncplane_putstr_yx(p, 0, 0, "💣");
                 }
                 else
                 {
-                    // Draw the number (neighbor count)
-                    ncplane_set_fg_rgb(p, 0x00FF00); // Green numbers
-                    char buf[2] = {board[y][x].neighbor_count + '0', '\0'};
-                    ncplane_putstr_yx(p, 0, 0, buf);
+                    switch (board[y][x].display_count)
+                    {
+                    case 0:
+                        ncplane_putstr_yx(p, 0, 0, "  ");
+                        break;
+                    case 1:
+                        ncplane_set_fg_rgb(p, 0x0000FF);
+                        ncplane_putstr_yx(p, 0, 0, "1");
+                        break;
+                    case 2:
+                        ncplane_set_fg_rgb(p, 0x008000);
+                        ncplane_putstr_yx(p, 0, 0, "2");
+                        break;
+                    case 3:
+                        ncplane_set_fg_rgb(p, 0xFF0000);
+                        ncplane_putstr_yx(p, 0, 0, "3");
+                        break;
+                    case 4:
+                        ncplane_set_fg_rgb(p, 0x9400D3);
+                        ncplane_putstr_yx(p, 0, 0, "4");
+                        break;
+                    case 5:
+                        ncplane_set_fg_rgb(p, 0xFF1493);
+                        ncplane_putstr_yx(p, 0, 0, "5");
+                        break;
+                    case 6:
+                        ncplane_set_fg_rgb(p, 0x00FFFF);
+                        ncplane_putstr_yx(p, 0, 0, "6");
+                        break;
+                    case 7:
+                        ncplane_set_fg_rgb(p, 0xFFFFFF);
+                        ncplane_putstr_yx(p, 0, 0, "7");
+                        break;
+                    case 8:
+                        ncplane_set_fg_rgb(p, 0x2F4F4F);
+                        ncplane_putstr_yx(p, 0, 0, "8");
+                        break;
+                    }
                 }
             }
             else if (board[y][x].is_flagged)
             {
+                if (state->variant == CHECKBOARD && (y + x) % 2 == 0)
+                {
+                    ncplane_set_bg_rgb(p, 0x3B444B);
+                }
+                
                 ncplane_set_fg_rgb(p, 0xFFFF00); // Yellow flag
                 ncplane_putstr_yx(p, 0, 0, "⚑");
             }
@@ -400,10 +474,18 @@ void drawBoard(struct notcurses *nc, gameState *state, cell_t board[state->board
             {
                 ncplane_set_fg_rgb(p, 0x888888); // Hidden tile
                 ncplane_putstr_yx(p, 0, 0, "回");
+                allTilesRevealed = false;
             }
         }
     }
-    notcurses_render(nc); // Render everything once after all planes are updated
+    if (allTilesRevealed)
+    {
+        state->userWon = true;
+        gameOver(state);
+    }
+    
+    
+    notcurses_render(state->nc); // Render everything once after all planes are updated
 }
 
 void getUserControls(uint32_t key, gameState *state, cell_t board[state->boardHeight][state->boardWidth])
@@ -444,7 +526,17 @@ void getUserControls(uint32_t key, gameState *state, cell_t board[state->boardHe
         break;
     case 'f':
     case 'F':
-        // handle_flag logic here
+        if (board[state->cursor_y][state->cursor_x].is_flagged)
+        {
+            board[state->cursor_y][state->cursor_x].is_flagged = 0;
+            state->flagCount--;
+        }
+        else if (state->flagCount < state->mineCount && !board[state->cursor_y][state->cursor_x].is_revealed)
+        {
+            board[state->cursor_y][state->cursor_x].is_flagged = 1;
+            state->flagCount++;
+        }
+
         break;
     case 'q':
     case 'Q':
@@ -456,30 +548,82 @@ void getUserControls(uint32_t key, gameState *state, cell_t board[state->boardHe
     }
 }
 
-void revealTile(gameState *state, cell_t board[state->boardHeight][state->boardWidth], int x, int y){
+void revealTile(gameState *state, cell_t board[state->boardHeight][state->boardWidth], int x, int y)
+{
     if (board[y][x].is_revealed)
     {
         return;
     }
-    else board[y][x].is_revealed = 1;
+    if (board[y][x].is_mine)
+    {
+        for (int i = 0; i < state->boardHeight; i++)
+        {
+            for (int j = 0; j < state->boardWidth; j++)
+            {
+                if (board[i][j].is_mine)
+                {
+                    board[i][j].is_revealed = 1;
+                }
+                
+            }
+        }
+        gameOver(state);
+    }
+    else
+        board[y][x].is_revealed = 1;
 
-    if (board[y][x].neighbor_count == 0)
+    if (board[y][x].neighbor_count == 0 && !board[y][x].is_mine)
     {
         for (int dy = -1; dy <= 1; dy++)
+        {
+            for (int dx = -1; dx <= 1; dx++)
             {
-                for (int dx = -1; dx <= 1; dx++)
-                {
-                    int ny = y + dy; // neighbor y
-                    int nx = x + dx; // neighbor x
+                int ny = y + dy; // neighbor y
+                int nx = x + dx; // neighbor x
 
-                    // 1. BOUNDS CHECK: Ensure neighbor is inside the grid
-                    if (ny >= 0 && ny < state->boardHeight && nx >= 0 && nx < state->boardWidth)
-                    {
-                        revealTile(state, board, nx, ny);
-                    }
+                // 1. BOUNDS CHECK: Ensure neighbor is inside the grid
+                if (ny >= 0 && ny < state->boardHeight && nx >= 0 && nx < state->boardWidth)
+                {
+                    revealTile(state, board, nx, ny);
                 }
             }
-        
+        }
     }
-    
+}
+
+void gameOver(gameState *state)
+{
+    struct ncplane_options bg_opts = {
+        .y = (state->boardHeight / 2),
+        .x = state->boardWidth - 2,
+        .rows = 5,
+        .cols = 15,
+    };
+
+    struct ncplane_options opts = {
+        .y = 1 + (state->boardHeight / 2),
+        .x = (state->boardWidth),
+        .rows = 1,
+        .cols = 11,
+    };
+
+    struct ncplane *std = notcurses_stdplane(state->nc);
+    struct ncplane *bg_p = ncplane_create(std, &bg_opts);
+    struct ncplane *gameOver_p = ncplane_create(std, &opts);
+
+    // Set it to solid black
+    ncplane_set_bg_rgb(bg_p, 0x000000);
+    ncplane_set_base(bg_p, 0, 0, ' ');
+
+    // Style and Render
+    if (state->userWon)
+    {
+        ncplane_set_bg_rgb(gameOver_p, 0x008000); // Red
+        ncplane_putstr_yx(gameOver_p, 0, 0, " YOU WON! ");
+    }
+    else
+    {
+        ncplane_set_bg_rgb(gameOver_p, 0xFF0000); // Red
+        ncplane_putstr_yx(gameOver_p, 0, 0, " YOU LOST! ");
+    }
 }
