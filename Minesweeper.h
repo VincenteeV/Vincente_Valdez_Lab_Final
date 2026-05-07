@@ -1,10 +1,13 @@
-#define MINESWEEPER_H
+#pragma once
 
 #include <notcurses/notcurses.h>
 #include <stdbool.h>
 
+/**
+ * @brief
+ */
 typedef enum {
-    NORMAL, CHECKBOARD, LIAR
+    NORMAL, CHECKERBOARD, LIAR
 } GameMode;
 
 typedef enum {
@@ -31,8 +34,6 @@ typedef struct {
     struct notcurses *nc;
     GameMode variant;
 } gameState;
-
-// Function to set up the board
 
 int createMinesweeperGrid(struct notcurses* nc, int h, int w, cell_t board[h][w]);
 
