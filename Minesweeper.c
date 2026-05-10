@@ -19,11 +19,11 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    GameMode chosen_mode;
-    GameSize chosen_size;
+    GameMode chosenMode;
+    GameSize chosenSize;
 
     // Run main menu function to get chosen size and gamemode from user
-    if (runMainMenu(nc, &chosen_mode, &chosen_size) == -1)
+    if (runMainMenu(nc, &chosenMode, &chosenSize) == -1)
     {
         notcurses_stop(nc);
         return EXIT_SUCCESS;
@@ -35,19 +35,19 @@ int main(void)
 
     int boardWidth = 9, boardHeight = 9, mineCount = 10; // Set parameters to smallest sized board by default, then update if different choice is chosen
 
-    if (chosen_size == SIZE_MEDIUM)
+    if (chosenSize == MEDIUM)
     {
         boardWidth = 16;
         boardHeight = 16;
         mineCount = 40;
     }
-    else if (chosen_size == SIZE_LARGE)
+    else if (chosenSize == LARGE)
     {
         boardWidth = 30;
         boardHeight = 16;
         mineCount = 99;
     }
-    else if (chosen_size == SIZE_CUSTOM) // Update board height and width to align with selected size
+    else if (chosenSize == CUSTOM) // Update board height and width to align with selected size
     {
         boardHeight = getCustomInput(nc, 2, 5, "Please enter the number of rows: ");
         while (boardHeight > 30 || boardHeight == 0)
@@ -73,7 +73,7 @@ int main(void)
         ncplane_erase(notcurses_stdplane(nc));
     }
 
-    cell_t board[boardHeight][boardWidth]; // Create a 3d array of cell_t structs to represent each tile on the board
+    cell board[boardHeight][boardWidth]; // Create a 3d array of cell structs to represent each tile on the board
     if (createMinesweeperGrid(nc, boardHeight, boardWidth, board) != 0)
     {
         notcurses_stop(nc);
@@ -99,7 +99,7 @@ int main(void)
                        .boardWidth = boardWidth,
                        .mineCount = mineCount,
                        .flagCount = 0,
-                       .variant = chosen_mode,
+                       .variant = chosenMode,
                        .nc = nc};
 
     struct ncinput ni;
@@ -126,50 +126,14 @@ int main(void)
     return EXIT_SUCCESS;
 }
 
-int createMinesweeperGrid(struct notcurses *nc, int h, int w, cell_t board[h][w])
-{
-    struct ncplane *stdn = notcurses_stdplane(nc);
-
-    // Plane options blueprint, 2 columns wide to make cells square
-    struct ncplane_options cell_opts = {
-        .rows = 1,
-        .cols = 2,
-    };
-
-    for (int y = 0; y < h; y++)
-    {
-        for (int x = 0; x < w; x++)
-        {
-            // Calculate screen position padding
-            cell_opts.y = y + 2;
-            cell_opts.x = x * 2 + 5;
-
-            // Create the individual cell plane attached to standard plane
-            board[y][x].plane = ncplane_create(stdn, &cell_opts);
-            if (!board[y][x].plane)
-                return -1;
-
-            // Create logic state for each cell
-            board[y][x].is_mine = 0;
-            board[y][x].is_revealed = 0;
-            board[y][x].is_flagged = 0;
-            board[y][x].neighbor_count = 0;
-            board[y][x].display_count = 0;
-        }
-    }
-
-    // No errors with plane creation if function returns 0
-    return 0;
-}
-
-int runMainMenu(struct notcurses *nc, GameMode *out_mode, GameSize *out_size)
+int runMainMenu(struct notcurses *nc, GameMode *Mode, GameSize *Size)
 {
     struct ncplane *stdn = notcurses_stdplane(nc);
     struct ncinput ni;
 
     int cursor_pos = 0;
-    GameMode selected_mode = NORMAL;
-    GameSize selected_size = SIZE_SMALL;
+    GameMode selectedMode = NORMAL;
+    GameSize selectedSize = SMALL;
     bool running = true;
 
     while (running)
@@ -211,8 +175,8 @@ int runMainMenu(struct notcurses *nc, GameMode *out_mode, GameSize *out_size)
             } // Gap before start button
 
             // Determine if this item is currently selected by the user
-            bool is_active_mode = (i >= 0 && i <= 2 && (int)selected_mode == i);
-            bool is_active_size = (i >= 3 && i <= 6 && (int)selected_size == (i - 3));
+            bool isActiveMode = (i >= 0 && i <= 2 && (int)selectedMode == i);
+            bool isActiveSize = (i >= 3 && i <= 6 && (int)selectedSize == (i - 3));
 
             // Set colors based on cursor hover vs selection
             if (cursor_pos == i)
@@ -220,7 +184,7 @@ int runMainMenu(struct notcurses *nc, GameMode *out_mode, GameSize *out_size)
                 ncplane_set_bg_rgb(stdn, 0xFFFFFF);
                 ncplane_set_fg_rgb(stdn, 0x000000);
             }
-            else if (is_active_mode || is_active_size)
+            else if (isActiveMode || isActiveSize)
             {
                 ncplane_set_bg_rgb(stdn, 0x000000);
                 ncplane_set_fg_rgb(stdn, 0x00FFFF);
@@ -234,7 +198,7 @@ int runMainMenu(struct notcurses *nc, GameMode *out_mode, GameSize *out_size)
             // Draw the checkbox and text
             char buffer[32];
             snprintf(buffer, sizeof(buffer), "[%c] %s",
-                     (is_active_mode || is_active_size) ? 'X' : ' ',
+                     (isActiveMode || isActiveSize) ? 'X' : ' ',
                      options[i]);
 
             ncplane_putstr_yx(stdn, row_offset++, 5, buffer);
@@ -256,11 +220,11 @@ int runMainMenu(struct notcurses *nc, GameMode *out_mode, GameSize *out_size)
         {
             if (cursor_pos >= 0 && cursor_pos <= 2)
             {
-                selected_mode = (GameMode)cursor_pos;
+                selectedMode = (GameMode)cursor_pos;
             }
             else if (cursor_pos >= 3 && cursor_pos <= 6)
             {
-                selected_size = (GameSize)(cursor_pos - 3);
+                selectedSize = (GameSize)(cursor_pos - 3);
             }
             else if (cursor_pos == 7)
             {
@@ -274,8 +238,8 @@ int runMainMenu(struct notcurses *nc, GameMode *out_mode, GameSize *out_size)
     }
 
     // Save choices to the pointers so main() can use them
-    *out_mode = selected_mode;
-    *out_size = selected_size;
+    *Mode = selectedMode;
+    *Size = selectedSize;
     return 0;
 }
 
@@ -322,7 +286,43 @@ int getCustomInput(struct notcurses *nc, int y, int x, const char *prompt)
     return atoi(buf);
 }
 
-void placeMines(gameState *state, cell_t board[state->boardHeight][state->boardWidth])
+int createMinesweeperGrid(struct notcurses *nc, int h, int w, cell board[h][w])
+{
+    struct ncplane *stdn = notcurses_stdplane(nc);
+
+    // Plane options blueprint, 2 columns wide to make cells square
+    struct ncplane_options cell_opts = {
+        .rows = 1,
+        .cols = 2,
+    };
+
+    for (int y = 0; y < h; y++)
+    {
+        for (int x = 0; x < w; x++)
+        {
+            // Calculate screen position padding
+            cell_opts.y = y + 2;
+            cell_opts.x = x * 2 + 5;
+
+            // Create the individual cell plane attached to standard plane
+            board[y][x].plane = ncplane_create(stdn, &cell_opts);
+            if (!board[y][x].plane)
+                return -1;
+
+            // Create logic state for each cell
+            board[y][x].is_mine = 0;
+            board[y][x].is_revealed = 0;
+            board[y][x].is_flagged = 0;
+            board[y][x].neighbor_count = 0;
+            board[y][x].display_count = 0;
+        }
+    }
+
+    // No errors with plane creation if function returns 0
+    return 0;
+}
+
+void placeMines(gameState *state, cell board[state->boardHeight][state->boardWidth])
 {
     int placed = 0;
     while (placed < state->mineCount)
@@ -340,7 +340,7 @@ void placeMines(gameState *state, cell_t board[state->boardHeight][state->boardW
     }
 }
 
-void countNeighbors(gameState *state, cell_t board[state->boardHeight][state->boardWidth])
+void countNeighbors(gameState *state, cell board[state->boardHeight][state->boardWidth])
 {
     for (int y = 0; y < state->boardHeight; y++)
     {
@@ -387,7 +387,7 @@ void countNeighbors(gameState *state, cell_t board[state->boardHeight][state->bo
         }
     }
 }
-void drawBoard(gameState *state, cell_t board[state->boardHeight][state->boardWidth])
+void drawBoard(gameState *state, cell board[state->boardHeight][state->boardWidth])
 {
     bool allTilesRevealed = true;
     for (int y = 0; y < state->boardHeight; y++)
@@ -469,12 +469,16 @@ void drawBoard(gameState *state, cell_t board[state->boardHeight][state->boardWi
                     ncplane_set_bg_rgb(p, 0x3B444B);
                 }
 
-                ncplane_set_fg_rgb(p, 0xFFFF00); // Yellow flag
+                ncplane_set_fg_rgb(p, 0xFFFF00);
                 ncplane_putstr_yx(p, 0, 0, "⚑");
+                if (!board[y][x].is_mine)
+                {
+                    allTilesRevealed = false;
+                }
             }
             else
             {
-                ncplane_set_fg_rgb(p, 0x888888); // Hidden tile
+                ncplane_set_fg_rgb(p, 0x888888);
                 ncplane_putstr_yx(p, 0, 0, "回");
                 allTilesRevealed = false;
                 // If there are any hidden tiles, the user hasn't finished the game
@@ -483,7 +487,7 @@ void drawBoard(gameState *state, cell_t board[state->boardHeight][state->boardWi
     }
     if (allTilesRevealed)
     {
-        // User wins game if there are no more hidden tiles
+        // User wins game if there are no more hidden tiles and all flagged tiles are mines
         state->userWon = true;
         gameOver(state);
     }
@@ -491,7 +495,7 @@ void drawBoard(gameState *state, cell_t board[state->boardHeight][state->boardWi
     notcurses_render(state->nc); // Render everything once after all cells are updated
 }
 
-void getUserControls(uint32_t key, gameState *state, cell_t board[state->boardHeight][state->boardWidth])
+void getUserControls(uint32_t key, gameState *state, cell board[state->boardHeight][state->boardWidth])
 {
 
     switch (key)
@@ -555,7 +559,7 @@ void getUserControls(uint32_t key, gameState *state, cell_t board[state->boardHe
     }
 }
 
-void revealTile(gameState *state, cell_t board[state->boardHeight][state->boardWidth], int x, int y)
+void revealTile(gameState *state, cell board[state->boardHeight][state->boardWidth], int x, int y)
 {
     // If tile is already revealed escape early
     if (board[y][x].is_revealed)
@@ -587,17 +591,17 @@ void revealTile(gameState *state, cell_t board[state->boardHeight][state->boardW
         state->flagCount--;
     }
 
-    //Perform recursive reveal of all 8 neighbors if the tile has zero neighbors
+    // Perform recursive reveal of all 8 neighbors if the tile has zero neighbors
     if (board[y][x].neighbor_count == 0 && !board[y][x].is_mine)
     {
         for (int dy = -1; dy <= 1; dy++)
         {
             for (int dx = -1; dx <= 1; dx++)
             {
-                int ny = y + dy; //neighbor y
-                int nx = x + dx; //neighbor x
+                int ny = y + dy; // neighbor y
+                int nx = x + dx; // neighbor x
 
-                //Ensure neighbor is inside the grid
+                // Ensure neighbor is inside the grid
                 if (ny >= 0 && ny < state->boardHeight && nx >= 0 && nx < state->boardWidth)
                 {
                     revealTile(state, board, nx, ny);
@@ -609,7 +613,7 @@ void revealTile(gameState *state, cell_t board[state->boardHeight][state->boardW
 
 void gameOver(gameState *state)
 {
-    //Default colored background overlay around text to make it look good
+    // Default colored background overlay around text to make it look good
     struct ncplane_options bg_opts = {
         .y = (state->boardHeight / 2),
         .x = state->boardWidth - 2,
@@ -631,7 +635,7 @@ void gameOver(gameState *state)
     ncplane_set_bg_rgb(bg_p, 0x000000);
     ncplane_set_base(bg_p, 0, 0, ' ');
 
-    //Render text
+    // Render text
     if (state->userWon)
     {
         ncplane_set_bg_rgb(gameOver_p, 0x008000);

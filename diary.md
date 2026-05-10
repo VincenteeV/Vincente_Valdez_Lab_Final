@@ -13,3 +13,9 @@ Created mine and flag count and disallowed user to place more flags after they h
 5/5: Made a screen for YOU WON and created a black border around the ending game message so that it looks cleaner. Also finished variants today with both complete and fully working. Had to change cursor color to accomodate the checkerboard color scheme but it all looks good now and works. Had to change my mine counting logic and add a display_count in addition to my already existing neighbor_count which helped with the liar logic. Last thing to do is finishing touches on the end game screen, may add replay option, may not because I'm lazy but I'll think about it tommorow.(Worked throughout day, ~4 Hours total on actual project)
 
 5/6:Fixed some edge cases involving controls and flags and added non-doxygen comments to main c file. (1.5 Hours)
+
+5/8: Started doxygen comments, got about half way through. Also completely wrote the reflections markdown file. (2 Hours)
+
+5/10: Finished doxygen commenting and wrote the readme file. Also did final git commit.
+
+https://github.com/VincenteeV/Vincente_Valdez_Lab_Final
